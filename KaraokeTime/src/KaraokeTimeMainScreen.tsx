@@ -3,10 +3,13 @@ import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-nativ
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const KaraokeTimeMainScreen = () => {
+
     const [ isKaraokeTimeRunning, setIsKaraokeTimeRunning ] = useState(false);
     const [ songCount, setSongCount ] = useState(0);
+
     const [ recommendedSong, setRecommendedSong ] = useState('');
     const [ isLoadingRecommended, setIsLoadingRecommended] = useState(true);
+    
     const timeoutId = useRef(0);
 
     useEffect(() => {
@@ -16,20 +19,23 @@ const KaraokeTimeMainScreen = () => {
             console.log('KaraokeTimeMainScreen unmounted v1')
         });
     }, []);
+
     useEffect(() => {
         console.log('KaraokeTimeMainScreen mounted v3');
 
         setIsLoadingRecommended(true);
-        
+
         timeoutId.current = setTimeout(() => {
-            setRecommendedSong("Californication");
+            setRecommendedSong('Californication');
             setIsLoadingRecommended(false);
         }, 2000);
 
         return (() => {
-            console.log('KaraokeTimeMainScreen unmounted v3')
+            console.log('KaraokeTimeMainScreen unmounted v3');
+            clearTimeout(timeoutId.current);
         });
     }, []);
+
     useEffect(() => {
         if (isKaraokeTimeRunning) {
             console.log('Karaoke started');
@@ -49,10 +55,18 @@ const KaraokeTimeMainScreen = () => {
             clearInterval(intervalId);
         };
     }, [isKaraokeTimeRunning]);
+
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle={'light-content'} />
             <View style={styles.spacer} />
+            <Text style={styles.recommendedText}>
+                {
+                    isLoadingRecommended ?
+                    "Loading recommendation..."
+                    : "Recommended song: " + recommendedSong
+                }
+                </Text>
             <Text style={styles.counterText}>Songs queued: {songCount}</Text>
             <TouchableOpacity
                 style={styles.bottomButton}
@@ -86,8 +100,13 @@ const styles = StyleSheet.create({
     },
     counterText: {
         textAlign: 'center',
-        marginTop: 16,
+        margin: 16,
         fontSize: 18,
+    },
+    recommendedText: {
+        marginBottom: 20,
+        fontSize: 20,
+        textAlign: 'center'
     }
 });
 
