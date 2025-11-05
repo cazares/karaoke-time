@@ -1,16 +1,33 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { InfoToast } from 'react-native-toast-message';
 
-function KaraokeTimeMainScreen() {
+const KaraokeTimeMainScreen = () => {
     const [ isKaraokeTimeRunning, setIsKaraokeTimeRunning ] = useState(false);
     const [ songCount, setSongCount ] = useState(0);
+    const [ recommendedSong, setRecommendedSong ] = useState('');
+    const [ isLoadingRecommended, setIsLoadingRecommended] = useState(true);
+    const timeoutId = useRef(0);
+
     useEffect(() => {
-        console.log('KaraokeTimeMainScreen mounted');
+        console.log('KaraokeTimeMainScreen mounted v1');
 
         return (() => {
-            console.log('KaraokeTimeMainScreen unmounted')
+            console.log('KaraokeTimeMainScreen unmounted v1')
+        });
+    }, []);
+    useEffect(() => {
+        console.log('KaraokeTimeMainScreen mounted v3');
+
+        setIsLoadingRecommended(true);
+        
+        timeoutId.current = setTimeout(() => {
+            setRecommendedSong("Californication");
+            setIsLoadingRecommended(false);
+        }, 2000);
+
+        return (() => {
+            console.log('KaraokeTimeMainScreen unmounted v3')
         });
     }, []);
     useEffect(() => {
@@ -20,11 +37,23 @@ function KaraokeTimeMainScreen() {
         else if (!isKaraokeTimeRunning) {
             console.log('Karaoke paused');
         }
+
+        if (!isKaraokeTimeRunning) {
+            return;
+        }
+        const intervalId = setInterval(() => {
+            setSongCount(songCount => songCount + 1);
+        }, 1000);
+
+        return () => {
+            clearInterval(intervalId);
+        };
     }, [isKaraokeTimeRunning]);
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle={'light-content'} />
             <View style={styles.spacer} />
+            <Text style={styles.counterText}>Songs queued: {songCount}</Text>
             <TouchableOpacity
                 style={styles.bottomButton}
                 onPress={() => setIsKaraokeTimeRunning(isKaraokeTimeRunning => !isKaraokeTimeRunning)}>
@@ -54,6 +83,11 @@ const styles = StyleSheet.create({
     },
     spacer: {
         flex: 1,
+    },
+    counterText: {
+        textAlign: 'center',
+        marginTop: 16,
+        fontSize: 18,
     }
 });
 
