@@ -1,0 +1,35 @@
+require_relative '../node_modules/react-native/scripts/react_native_pods'
+require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+
+platform :ios, '13.0'
+
+prepare_react_native_project!
+
+target 'KaraokeTime' do
+  use_frameworks! :linkage => :static
+
+  # Autolink RN + any native libraries
+  config = use_native_modules!
+
+  use_react_native!(
+    :path => config["reactNativePath"],
+    :app_path => "#{Pod::Config.instance.installation_root}/..",
+    # Hermes is default in recent RN; flip to false if you really want JSC.
+    :hermes_enabled => true
+  )
+
+  target 'KaraokeTimeTests' do
+    inherit! :complete
+    # Pods for testing
+  end
+
+  post_install do |installer|
+    react_native_post_install(
+      installer,
+      # Enable if you ever need Mac Catalyst.
+      :mac_catalyst_enabled => false
+    )
+  end
+end
+# end of Podfile
+
