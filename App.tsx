@@ -1,4 +1,4 @@
-// App.tsx — Mixterious (Drawer + Tabs) with compact WebView player and centered header
+// App.tsx — Mixterious (Drawer + Tabs) with compact player + persistent Lyrics panel + debug
 // TypeScript, no SafeAreaView; uses react-native-safe-area-context for insets.
 
 import React, { useEffect, useState } from 'react';
@@ -87,6 +87,7 @@ function DownloadScreen() {
   const [lyrics, setLyrics] = useState<string>('');
   const [nowPlayingTitle, setNowPlayingTitle] = useState<string>('');
   const [showLyrics, setShowLyrics] = useState<boolean>(false);
+  const [lastPayload, setLastPayload] = useState<any>(null); // dev-only debug
 
   // Prefer localhost on Simulator if health responds quickly; else use public.
   useEffect(() => {
@@ -134,6 +135,8 @@ function DownloadScreen() {
     setPlayerUrl(null);
     setLyrics('');
     setNowPlayingTitle('');
+    setLastPayload(null);
+
     try {
       // unified endpoint: /search { input }
       const res = await fetch(`${base}/search`, {
@@ -143,16 +146,25 @@ function DownloadScreen() {
       });
       if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
       const data: any = await res.json();
+
+      // DEV: log payload to Metro to see what keys came back
+      // Remove or guard this if noisy
+      console.log('[Mixterious] /search payload:', data);
+      setLastPayload(data);
+
       if (!data?.download_url) throw new Error('Malformed API response');
       setPlayerUrl(`${base}${data.download_url}`);
       setNowPlayingTitle(data.title || data.search_metadata?.full_title || '');
-      setLyrics(data.lyrics_text || '');
+      setLyrics(typeof data.lyrics_text === 'string' ? data.lyrics_text : '');
     } catch (e: any) {
       Alert.alert('Error', String(e?.message ?? e));
     } finally {
       setBusy(false);
     }
   };
+
+  // derived helper
+  const hasLyrics = !!lyrics && lyrics.trim().length > 0;
 
   return (
     <EdgeSafe>
@@ -186,21 +198,33 @@ function DownloadScreen() {
           </View>
         )}
 
-        {!!lyrics && (
-          <View style={styles.lyricsBox}>
-            <View style={styles.lyricsHeader}>
-              <Text style={styles.lyricsTitle}>Lyrics</Text>
+        {/* Always render a Lyrics panel so you can see a placeholder even if empty */}
+        <View style={styles.lyricsBox}>
+          <View style={styles.lyricsHeader}>
+            <Text style={styles.lyricsTitle}>Lyrics</Text>
+            {hasLyrics ? (
               <TouchableOpacity onPress={() => setShowLyrics(true)}>
                 <Text style={styles.lyricsMore}>Full screen</Text>
               </TouchableOpacity>
-            </View>
-            <ScrollView style={{ maxHeight: 220 }}>
-              <Text selectable style={styles.lyricsText}>
-                {lyrics}
-              </Text>
-            </ScrollView>
+            ) : (
+              <Text style={[styles.lyricsMore, { opacity: 0.5 }]}>Waiting…</Text>
+            )}
           </View>
-        )}
+          <ScrollView style={{ maxHeight: 220 }}>
+            <Text selectable style={styles.lyricsText}>
+              {hasLyrics ? lyrics : 'No lyrics returned yet. Try a different query or verify the backend returns "lyrics_text".'}
+            </Text>
+          </ScrollView>
+
+          {/* DEV-only: show which keys came back so you can confirm the API contract */}
+          {__DEV__ && lastPayload && (
+            <View style={{ marginTop: 8 }}>
+              <Text style={{ color: '#9aa0a6', fontSize: 12 }}>
+                Debug keys: {Object.keys(lastPayload).join(', ')}
+              </Text>
+            </View>
+          )}
+        </View>
 
         {playerUrl && (
           <View
@@ -402,7 +426,6 @@ function Root() {
     colors: { ...DefaultTheme.colors, background: '#0b0b0b' },
   };
 
-  // Per-screen subtitle mapping for the centered header
   const subtitleForRoute = (name: string) => {
     switch (name) {
       case 'Steps 1–4':
@@ -421,7 +444,6 @@ function Root() {
       <Drawer.Navigator
         initialRouteName="Steps 1–4"
         drawerContent={(p) => <DrawerContent {...p} />}
-        // Header with centered title/subtitle + hamburger
         screenOptions={({ navigation, route }) => ({
           headerShown: true,
           headerStyle: { backgroundColor: '#0b0b0b' },
@@ -432,9 +454,7 @@ function Root() {
           ),
           headerLeft: () => (
             <HeaderMenuButton
-              onPress={() =>
-                navigation.dispatch(DrawerActions.toggleDrawer())
-              }
+              onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())}
             />
           ),
         })}>
