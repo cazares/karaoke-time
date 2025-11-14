@@ -1,0 +1,1 @@
+./fix.sh --port 8082 --sim "iPhone 17 Pro" --no-yarn --no-pods
