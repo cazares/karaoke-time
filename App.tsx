@@ -1,8 +1,7 @@
-// App.tsx — Mixterious (Drawer + Tabs): unified Step 1 download UI, future steps scaffold.
-// TypeScript, no SafeAreaView. Insets via useSafeAreaInsets wrapper.
-// Tabs: Screen A (Download/Process), B (Sync/Calibrate), C (Generate/Upload)
+// App.tsx — Mixterious (Drawer + Tabs) with centered header title/subtitle + hamburger
+// TypeScript, no SafeAreaView; uses react-native-safe-area-context for insets.
 
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {JSX, useEffect, useState} from 'react';
 import {
   View,
   Text,
@@ -14,34 +13,67 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
-import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
-import {createDrawerNavigator, DrawerContentScrollView, DrawerItem} from '@react-navigation/drawer';
+import {
+  NavigationContainer,
+  DefaultTheme,
+  DrawerActions,
+  ParamListBase,
+} from '@react-navigation/native';
+import {
+  createDrawerNavigator,
+  DrawerContentScrollView,
+  DrawerItem,
+} from '@react-navigation/drawer';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
-import {useSafeAreaInsets, SafeAreaProvider} from 'react-native-safe-area-context';
+import {
+  useSafeAreaInsets,
+  SafeAreaProvider,
+} from 'react-native-safe-area-context';
 import {WebView} from 'react-native-webview';
 
 // ---- Config ----
-const PUBLIC_BASE = 'https://api.mixterioso.example.com'; // TODO: set your Cloudflare/public URL
+const PUBLIC_BASE = 'https://api.mixterioso.example.com'; // TODO: replace with your public hostname
 const LOCAL_BASE = 'http://127.0.0.1:8000';
 
-// Edge-safe wrapper (no SafeAreaView)
+// ---- Edge-safe wrapper (no deprecated SafeAreaView) ----
 function EdgeSafe({children}: {children: React.ReactNode}): JSX.Element {
   const i = useSafeAreaInsets();
   return (
-    <View style={[styles.safe, {paddingTop: i.top, paddingBottom: i.bottom, paddingLeft: i.left, paddingRight: i.right}]}>
+    <View
+      style={[
+        styles.safe,
+        {
+          paddingTop: i.top,
+          paddingBottom: i.bottom,
+          paddingLeft: i.left,
+          paddingRight: i.right,
+        },
+      ]}>
       {children}
     </View>
   );
 }
 
 // ---- Reusable Step Bar (bottom of content area) ----
-function StepBar({labels, enabledIdx = 0}: {labels: string[]; enabledIdx?: number}) {
+function StepBar({
+  labels,
+  enabledIdx = 0,
+}: {
+  labels: string[];
+  enabledIdx?: number;
+}) {
   return (
     <View style={styles.stepBar}>
       {labels.map((label, idx) => {
-        const enabled = idx === enabledIdx; // only first active in each phase for now
+        const enabled = idx === enabledIdx;
         return (
-          <View key={label} style={[styles.stepItem, !enabled && styles.stepDisabled, idx > 0 && styles.stepDivider]}>
+          <View
+            key={label}
+            style={[
+              styles.stepItem,
+              !enabled && styles.stepDisabled,
+              idx > 0 && styles.stepDivider,
+            ]}>
             <Text style={styles.stepText}>{label}</Text>
           </View>
         );
@@ -60,14 +92,16 @@ function DownloadScreen(): JSX.Element {
   const [nowPlayingTitle, setNowPlayingTitle] = useState<string>('');
   const [showLyrics, setShowLyrics] = useState<boolean>(false);
 
-  // Probe local health; if reachable quickly, prefer local; otherwise public.
+  // Prefer localhost on Simulator if health responds quickly; else use public.
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const c = new AbortController();
         const t = setTimeout(() => c.abort(), 1200);
-        const r = await fetch(`${LOCAL_BASE.replace(/\/$/,'')}/health`, {signal: c.signal});
+        const r = await fetch(`${LOCAL_BASE.replace(/\/$/, '')}/health`, {
+          signal: c.signal,
+        });
         clearTimeout(t);
         if (!alive) return;
         setApiBase(r.ok ? LOCAL_BASE : PUBLIC_BASE);
@@ -76,12 +110,14 @@ function DownloadScreen(): JSX.Element {
         setApiBase(PUBLIC_BASE);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const htmlFor = (src: string): string => `
     <!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">
-    <body style="margin:0;background:#0b0b0b;color:#fff;font:16px -apple-system,system-ui">
+    <body style="margin:0;background:#0b0b0b;color:#fff;font:16px;height:100px -apple-system,system-ui">
       <div style="padding:16px">
         <h3 style="margin:0 0 12px">${(nowPlayingTitle || 'Mixterious — Player').replace(/</g,'&lt;')}</h3>
         <audio controls autoplay src="${src}" style="width:100%"></audio>
@@ -93,11 +129,18 @@ function DownloadScreen(): JSX.Element {
     const base = apiBase.replace(/\/$/, '');
     const value = input.trim();
     if (!value) {
-      Alert.alert('Enter something', 'Paste a YouTube URL/ID or type “artist - title”.');
+      Alert.alert(
+        'Enter something',
+        'Paste a YouTube URL/ID or type “artist - title”.',
+      );
       return;
     }
-    setBusy(true); setPlayerUrl(null); setLyrics(''); setNowPlayingTitle('');
+    setBusy(true);
+    setPlayerUrl(null);
+    setLyrics('');
+    setNowPlayingTitle('');
     try {
+      // unified endpoint: /search { input }
       const res = await fetch(`${base}/search`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -111,15 +154,14 @@ function DownloadScreen(): JSX.Element {
       setLyrics(data.lyrics_text || '');
     } catch (e: any) {
       Alert.alert('Error', String(e?.message ?? e));
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <EdgeSafe>
       <View style={styles.container}>
-        <Text style={styles.title}>Mixterious</Text>
-        <Text style={styles.subtitle}>Step 1 of 6</Text>
-
         <Text style={styles.label}>YouTube URL / ID / Query</Text>
         <TextInput
           value={input}
@@ -128,10 +170,18 @@ function DownloadScreen(): JSX.Element {
           autoCapitalize="none"
           autoCorrect={false}
           style={styles.input}
+          returnKeyType="go"
+          blurOnSubmit
+          onSubmitEditing={onSearch} // enter/return triggers same action
         />
 
-        <TouchableOpacity style={[styles.btn, busy && styles.btnDisabled]} disabled={busy} onPress={onSearch}>
-          <Text style={styles.btnText}>{busy ? 'Working…' : 'Search + Download'}</Text>
+        <TouchableOpacity
+          style={[styles.btn, busy && styles.btnDisabled]}
+          disabled={busy}
+          onPress={onSearch}>
+          <Text style={styles.btnText}>
+            {busy ? 'Working…' : 'Search + Download'}
+          </Text>
         </TouchableOpacity>
 
         {busy && (
@@ -145,16 +195,21 @@ function DownloadScreen(): JSX.Element {
           <View style={styles.lyricsBox}>
             <View style={styles.lyricsHeader}>
               <Text style={styles.lyricsTitle}>Lyrics</Text>
-              <TouchableOpacity onPress={() => setShowLyrics(true)}><Text style={styles.lyricsMore}>Full screen</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowLyrics(true)}>
+                <Text style={styles.lyricsMore}>Full screen</Text>
+              </TouchableOpacity>
             </View>
             <ScrollView style={{maxHeight: 220}}>
-              <Text selectable style={styles.lyricsText}>{lyrics}</Text>
+              <Text selectable style={styles.lyricsText}>
+                {lyrics}
+              </Text>
             </ScrollView>
           </View>
         )}
 
         {playerUrl && (
-          <View style={{flex: 1, marginTop: 12, borderRadius: 10, overflow: 'hidden'}}>
+          <View
+            style={{flex: 1, marginTop: 12, borderRadius: 10, overflow: 'hidden'}}>
             <WebView
               source={{html: htmlFor(playerUrl)}}
               originWhitelist={['*']}
@@ -164,31 +219,50 @@ function DownloadScreen(): JSX.Element {
           </View>
         )}
 
-        <Modal visible={showLyrics} animationType="slide" onRequestClose={() => setShowLyrics(false)}>
+        <Modal
+          visible={showLyrics}
+          animationType="slide"
+          onRequestClose={() => setShowLyrics(false)}>
           <EdgeSafe>
-            <View style={{paddingHorizontal: 16, paddingTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-              <Text style={{color: '#fff', fontSize: 18, fontWeight: '700'}}>Lyrics</Text>
-              <TouchableOpacity onPress={() => setShowLyrics(false)}><Text style={{color: '#7fb0ff', fontSize: 16}}>Close</Text></TouchableOpacity>
+            <View
+              style={{
+                paddingHorizontal: 16,
+                paddingTop: 8,
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}>
+              <Text style={{color: '#fff', fontSize: 18, fontWeight: '700'}}>
+                Lyrics
+              </Text>
+              <TouchableOpacity onPress={() => setShowLyrics(false)}>
+                <Text style={{color: '#7fb0ff', fontSize: 16}}>Close</Text>
+              </TouchableOpacity>
             </View>
             <ScrollView style={{flex: 1, padding: 16}}>
-              <Text selectable style={styles.lyricsText}>{lyrics}</Text>
+              <Text selectable style={styles.lyricsText}>
+                {lyrics}
+              </Text>
             </ScrollView>
           </EdgeSafe>
         </Modal>
 
-        <StepBar labels={['Download', 'Process', 'Sync', 'Calibrate', 'Generate', 'Upload']} enabledIdx={0} />
+        <StepBar
+          labels={['Download', 'Process', 'Sync', 'Calibrate', 'Generate', 'Upload']}
+          enabledIdx={0}
+        />
       </View>
     </EdgeSafe>
   );
 }
 
-// ---- Placeholder screens (disabled/coming soon) ----
+// ---- Placeholder screens (scaffold) ----
 function Placeholder({title, subtitle}: {title: string; subtitle: string}) {
   return (
     <EdgeSafe>
       <View style={styles.container}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.subtitle}>{subtitle}</Text>
+        <Text style={styles.pageTitle}>{title}</Text>
+        <Text style={styles.pageSubtitle}>{subtitle}</Text>
         <View style={[styles.lyricsBox, {alignItems: 'center'}]}>
           <Text style={[styles.lyricsText, {opacity: 0.6}]}>Coming soon</Text>
         </View>
@@ -197,14 +271,20 @@ function Placeholder({title, subtitle}: {title: string; subtitle: string}) {
   );
 }
 
-// ---- Tabs per Drawer screen ----
+// ---- Tabs per Drawer section ----
 const Tabs = createBottomTabNavigator();
 
 function Tabs_A() {
   return (
     <Tabs.Navigator screenOptions={{headerShown: false, tabBarStyle: styles.tabBar}}>
       <Tabs.Screen name="Download" component={DownloadScreen} />
-      <Tabs.Screen name="Process" children={() => <Placeholder title="Mixterious" subtitle="Steps 1–4 of 6 — Process" />} options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}} />
+      <Tabs.Screen
+        name="Process"
+        children={() => (
+          <Placeholder title="Mixterious" subtitle="Steps 1–4 of 6 — Process" />
+        )}
+        options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}}
+      />
     </Tabs.Navigator>
   );
 }
@@ -212,8 +292,20 @@ function Tabs_A() {
 function Tabs_B() {
   return (
     <Tabs.Navigator screenOptions={{headerShown: false, tabBarStyle: styles.tabBar}}>
-      <Tabs.Screen name="Sync" children={() => <Placeholder title="Mixterious" subtitle="Steps 3–4 of 6 — Sync" />} options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}} />
-      <Tabs.Screen name="Calibrate" children={() => <Placeholder title="Mixterious" subtitle="Steps 3–4 of 6 — Calibrate" />} options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}} />
+      <Tabs.Screen
+        name="Sync"
+        children={() => (
+          <Placeholder title="Mixterious" subtitle="Steps 3–4 of 6 — Sync" />
+        )}
+        options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}}
+      />
+      <Tabs.Screen
+        name="Calibrate"
+        children={() => (
+          <Placeholder title="Mixterious" subtitle="Steps 3–4 of 6 — Calibrate" />
+        )}
+        options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}}
+      />
     </Tabs.Navigator>
   );
 }
@@ -221,9 +313,51 @@ function Tabs_B() {
 function Tabs_C() {
   return (
     <Tabs.Navigator screenOptions={{headerShown: false, tabBarStyle: styles.tabBar}}>
-      <Tabs.Screen name="Generate" children={() => <Placeholder title="Mixterious" subtitle="Steps 5–6 of 6 — Generate" />} options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}} />
-      <Tabs.Screen name="Upload" children={() => <Placeholder title="Mixterious" subtitle="Steps 5–6 of 6 — Upload" />} options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}} />
+      <Tabs.Screen
+        name="Generate"
+        children={() => (
+          <Placeholder title="Mixterious" subtitle="Steps 5–6 of 6 — Generate" />
+        )}
+        options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}}
+      />
+      <Tabs.Screen
+        name="Upload"
+        children={() => (
+          <Placeholder title="Mixterious" subtitle="Steps 5–6 of 6 — Upload" />
+        )}
+        options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}}
+      />
     </Tabs.Navigator>
+  );
+}
+
+// ---- Drawer header helpers ----
+function HeaderTitle({title, subtitle}: {title: string; subtitle: string}) {
+  return (
+    <View style={{alignItems: 'center'}}>
+      <Text style={{color: '#fff', fontSize: 18, fontWeight: '800'}}>{title}</Text>
+      <Text style={{color: '#a9a9a9', fontSize: 12}}>{subtitle}</Text>
+    </View>
+  );
+}
+
+function HeaderMenuButton({onPress}: {onPress: () => void}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Open menu"
+      hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+      style={{
+        width: 64,           // wider tap target (was ~32)
+        height: 64,          // taller tap target
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 0,
+        paddingVertical: 0,
+      }}>
+      <Text style={{color: '#fff', fontSize: 40, lineHeight: 40}}>≡</Text> {/* doubled from 20 */}
+    </TouchableOpacity>
   );
 }
 
@@ -231,21 +365,34 @@ function Tabs_C() {
 const Drawer = createDrawerNavigator();
 
 function DrawerContent(props: any) {
+  const insets = useSafeAreaInsets();
   return (
-    <DrawerContentScrollView {...props} contentContainerStyle={{flex: 1, paddingTop: 24}}>
-      <Text style={styles.drawerHeader}>Mixterious{'\n\n'}Steps 1–4 of 6</Text>
+    <DrawerContentScrollView
+      {...props}
+      contentContainerStyle={{
+        flex: 1,
+        paddingTop: insets.top,
+        paddingBottom: insets.bottom,
+        backgroundColor: '#1E282D',
+        justifyContent: 'center', // <-- vertical centering
+      }}>
+      <Text style={styles.drawerHeader}>Steps 1-2</Text>
       <DrawerItem
         label="Download Lyrics + Audio"
         labelStyle={styles.drawerItem}
         onPress={() => props.navigation.navigate('Steps 1–4')}
       />
-      <Text style={[styles.drawerHeader, {marginTop: 24}]}>Mixterious{'\n\n'}Steps 3–4 of 6</Text>
+      <Text style={[styles.drawerHeader, {marginTop: 24}]}>
+        Steps 3-4
+      </Text>
       <DrawerItem
         label="Stitch Lyrics + Audio"
         labelStyle={styles.drawerItem}
         onPress={() => props.navigation.navigate('Steps 3–4')}
       />
-      <Text style={[styles.drawerHeader, {marginTop: 24}]}>Mixterious{'\n\n'}Steps 5–6 of 6</Text>
+      <Text style={[styles.drawerHeader, {marginTop: 24}]}>
+        Steps 5–6
+      </Text>
       <DrawerItem
         label="Output Lyrics Video"
         labelStyle={styles.drawerItem}
@@ -260,13 +407,43 @@ function Root() {
     ...DefaultTheme,
     colors: {...DefaultTheme.colors, background: '#0b0b0b'},
   };
+
+  // Per-screen subtitle mapping for the centered header
+  const subtitleForRoute = (name: string) => {
+    switch (name) {
+      case 'Steps 1–4':
+        return 'Step 1 of 6';
+      case 'Steps 3–4':
+        return 'Steps 3–4 of 6';
+      case 'Steps 5–6':
+        return 'Steps 5–6 of 6';
+      default:
+        return '';
+    }
+  };
+
   return (
     <NavigationContainer theme={theme}>
       <Drawer.Navigator
         initialRouteName="Steps 1–4"
-        drawerContent={(p) => <DrawerContent {...p} />}
-        screenOptions={{headerShown: false}}
-      >
+        drawerContent={p => <DrawerContent {...p} />}
+        // Header with centered title/subtitle + hamburger
+        screenOptions={({navigation, route}) => ({
+          headerShown: true,
+          headerStyle: {backgroundColor: '#0b0b0b', alignContent: 'center', alignItems: 'center', alignSelf: 'center'},
+          headerTintColor: '#fff',
+          headerTitleAlign: 'center',
+          headerTitle: () => (
+            <HeaderTitle title="Mixterious" subtitle={subtitleForRoute(route.name)} />
+          ),
+          headerLeft: () => (
+            <HeaderMenuButton
+              onPress={() =>
+                navigation.dispatch(DrawerActions.toggleDrawer())
+              }
+            />
+          ),
+        })}>
         <Drawer.Screen name="Steps 1–4" component={Tabs_A} />
         <Drawer.Screen name="Steps 3–4" component={Tabs_B} />
         <Drawer.Screen name="Steps 5–6" component={Tabs_C} />
@@ -286,27 +463,87 @@ export default function App(): JSX.Element {
 const styles = StyleSheet.create({
   safe: {flex: 1, backgroundColor: '#0b0b0b'},
   container: {flex: 1, padding: 16},
-  title: {color: '#fff', fontSize: 24, fontWeight: '800'},
-  subtitle: {color: '#a9a9a9', marginBottom: 12},
+  pageTitle: {color: '#fff', fontSize: 24, fontWeight: '800'},
+  pageSubtitle: {color: '#a9a9a9', marginBottom: 12},
   label: {color: '#bdbdbd', marginTop: 10},
-  input: {backgroundColor: '#1c1c1e', color: '#fff', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10},
-  btn: {marginTop: 12, backgroundColor: '#2f6dfc', paddingVertical: 12, borderRadius: 10, alignItems: 'center'},
+  input: {
+    backgroundColor: '#1c1c1e',
+    color: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  btn: {
+    marginTop: 12,
+    backgroundColor: '#2f6dfc',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
   btnDisabled: {opacity: 0.6},
   btnText: {color: '#fff', fontWeight: '700'},
   row: {flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10},
   progress: {color: '#ddd'},
-  lyricsBox: {marginTop: 12, backgroundColor: '#121214', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#2a2a2e'},
-  lyricsHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6},
+  lyricsBox: {
+    marginTop: 12,
+    backgroundColor: '#121214',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a2e',
+  },
+  lyricsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   lyricsTitle: {color: '#fff', fontWeight: '700'},
   lyricsMore: {color: '#7fb0ff'},
   lyricsText: {color: '#e6e6e6', fontFamily: 'Menlo'},
-  stepBar: {flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#2a2a2e', marginTop: 10},
+  stepBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#EEE',
+    marginTop: 10,
+  },
   stepItem: {flex: 1, alignItems: 'center', paddingVertical: 6},
   stepDisabled: {opacity: 0.4},
-  stepDivider: {borderLeftWidth: 1, borderLeftColor: '#2a2a2e'},
+  stepDivider: {borderLeftWidth: 1, borderRightWidth: 1, borderLeftColor: '#EEE'},
   stepText: {color: '#fff', fontSize: 12, fontWeight: '700'},
-  tabBar: {backgroundColor: '#121214', borderTopColor: '#2a2a2e'},
-  drawerHeader: {color: '#fff', fontSize: 16, fontWeight: '800', marginHorizontal: 16, marginBottom: 6},
-  drawerItem: {color: '#fff'},
+  tabBar: {backgroundColor: '#EEE', borderTopColor: '#EEE'},
+  drawerHeader: {
+    color: 'white',
+    fontSize: 22,
+    fontWeight: '800',
+    marginHorizontal: 15,
+    marginBottom: 6,
+    paddingTop: 35,
+    // flex: 1,
+    justifyContent: 'space-between',
+    alignContent: 'center',
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'white',
+  },
+  drawerItem: {
+    color: 'white', 
+    backgroundColor: '#1E282D', 
+    // height: 60, 
+    // textAlignVertical: 'center', 
+    // textAlign: 'center', 
+    // justifyContent: 'center',
+    // alignContent: 'center',
+    // alignItems: 'center',
+    // verticalAlign: 'middle',
+    // alignSelf: 'center',
+    // paddingTop: 18,
+    fontSize: 18,
+    fontWeight: 600,
+    // borderTopWidth: StyleSheet.hairlineWidth,
+    // borderTopColor: 'white',
+  },
 });
 // end of App.tsx
