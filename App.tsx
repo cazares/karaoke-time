@@ -1,89 +1,137 @@
-// App.js — Mixterious (Simulator-friendly: stream MP3 via <audio> in WebView)
-import React, { useState } from 'react';
+// App.tsx — Mixterious (Drawer + Tabs): unified Step 1 download UI, future steps scaffold.
+// TypeScript, no SafeAreaView. Insets via useSafeAreaInsets wrapper.
+// Tabs: Screen A (Download/Process), B (Sync/Calibrate), C (Generate/Upload)
+
+import React, {useEffect, useMemo, useState} from 'react';
 import {
-  SafeAreaView, View, Text, TextInput, TouchableOpacity,
-  ActivityIndicator, StyleSheet, Alert, Linking
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  StyleSheet,
+  Alert,
+  Modal,
+  ScrollView,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
+import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
+import {createDrawerNavigator, DrawerContentScrollView, DrawerItem} from '@react-navigation/drawer';
+import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import {useSafeAreaInsets, SafeAreaProvider} from 'react-native-safe-area-context';
+import {WebView} from 'react-native-webview';
 
-const DEFAULT_API_BASE = 'http://127.0.0.1:8000'; // Simulator → your Mac
+// ---- Config ----
+const PUBLIC_BASE = 'https://api.mixterioso.example.com'; // TODO: set your Cloudflare/public URL
+const LOCAL_BASE = 'http://127.0.0.1:8000';
 
-export default function App() {
-  const [apiBase, setApiBase] = useState(DEFAULT_API_BASE);
-  const [ytUrl, setYtUrl] = useState('https://www.youtube.com/watch?v=OIxRRR3gS_E');
-  const [busy, setBusy] = useState(false);
-  const [playerUrl, setPlayerUrl] = useState<string | null>(null); // e.g. http://127.0.0.1:8000/files/<id>.mp3
+// Edge-safe wrapper (no SafeAreaView)
+function EdgeSafe({children}: {children: React.ReactNode}): JSX.Element {
+  const i = useSafeAreaInsets();
+  return (
+    <View style={[styles.safe, {paddingTop: i.top, paddingBottom: i.bottom, paddingLeft: i.left, paddingRight: i.right}]}>
+      {children}
+    </View>
+  );
+}
 
-  const createAndPlay = async () => {
-    const base = apiBase.trim().replace(/\/$/, '');
-    if (!/^https?:\/\//i.test(base)) return Alert.alert('Invalid API base', 'e.g. http://127.0.0.1:8000');
-    if (!/^https?:\/\//i.test(ytUrl.trim())) return Alert.alert('Invalid URL', 'Paste a full YouTube URL.');
+// ---- Reusable Step Bar (bottom of content area) ----
+function StepBar({labels, enabledIdx = 0}: {labels: string[]; enabledIdx?: number}) {
+  return (
+    <View style={styles.stepBar}>
+      {labels.map((label, idx) => {
+        const enabled = idx === enabledIdx; // only first active in each phase for now
+        return (
+          <View key={label} style={[styles.stepItem, !enabled && styles.stepDisabled, idx > 0 && styles.stepDivider]}>
+            <Text style={styles.stepText}>{label}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
-    setBusy(true);
-    setPlayerUrl(null);
-    try {
-      // 1) Ask API to create MP3
-      const res = await fetch(`${base}/mp3`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ youtube_url: ytUrl.trim(), bitrate_kbps: 192 }),
-      });
-      if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      if (!data?.download_url) throw new Error('Malformed API response');
-      // 2) Stream it in-app via WebView <audio>
-      setPlayerUrl(`${base}${data.download_url}`);
-    } catch (e: any) {
-      Alert.alert('Error', String(e?.message || e));
-    } finally {
-      setBusy(false);
-    }
-  };
+// ---- Download Screen (Step 1 of 6) ----
+function DownloadScreen(): JSX.Element {
+  const [apiBase, setApiBase] = useState<string>(PUBLIC_BASE);
+  const [input, setInput] = useState<string>('');
+  const [busy, setBusy] = useState<boolean>(false);
+  const [playerUrl, setPlayerUrl] = useState<string | null>(null);
+  const [lyrics, setLyrics] = useState<string>('');
+  const [nowPlayingTitle, setNowPlayingTitle] = useState<string>('');
+  const [showLyrics, setShowLyrics] = useState<boolean>(false);
 
-  const htmlFor = (src: string) => `
-    <!doctype html>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+  // Probe local health; if reachable quickly, prefer local; otherwise public.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 1200);
+        const r = await fetch(`${LOCAL_BASE.replace(/\/$/,'')}/health`, {signal: c.signal});
+        clearTimeout(t);
+        if (!alive) return;
+        setApiBase(r.ok ? LOCAL_BASE : PUBLIC_BASE);
+      } catch {
+        if (!alive) return;
+        setApiBase(PUBLIC_BASE);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const htmlFor = (src: string): string => `
+    <!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">
     <body style="margin:0;background:#0b0b0b;color:#fff;font:16px -apple-system,system-ui">
       <div style="padding:16px">
-        <h3 style="margin:0 0 12px">Mixterious — Player</h3>
+        <h3 style="margin:0 0 12px">${(nowPlayingTitle || 'Mixterious — Player').replace(/</g,'&lt;')}</h3>
         <audio controls autoplay src="${src}" style="width:100%"></audio>
-        <p style="opacity:.75;margin-top:12px">
-          If audio doesn’t start, tap play. You can also
-          <a href="${src}" target="_blank" style="color:#7fb0ff">open in Safari</a>.
-        </p>
       </div>
     </body>
   `;
 
+  const onSearch = async () => {
+    const base = apiBase.replace(/\/$/, '');
+    const value = input.trim();
+    if (!value) {
+      Alert.alert('Enter something', 'Paste a YouTube URL/ID or type “artist - title”.');
+      return;
+    }
+    setBusy(true); setPlayerUrl(null); setLyrics(''); setNowPlayingTitle('');
+    try {
+      const res = await fetch(`${base}/search`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({input: value, bitrate_kbps: 192}),
+      });
+      if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+      const data: any = await res.json();
+      if (!data?.download_url) throw new Error('Malformed API response');
+      setPlayerUrl(`${base}${data.download_url}`);
+      setNowPlayingTitle(data.title || data.search_metadata?.full_title || '');
+      setLyrics(data.lyrics_text || '');
+    } catch (e: any) {
+      Alert.alert('Error', String(e?.message ?? e));
+    } finally { setBusy(false); }
+  };
+
   return (
-    <SafeAreaView style={styles.safe}>
+    <EdgeSafe>
       <View style={styles.container}>
-        <Text style={styles.title}>Mixterious — YouTube → MP3</Text>
+        <Text style={styles.title}>Mixterious</Text>
+        <Text style={styles.subtitle}>Step 1 of 6</Text>
 
-        <Text style={styles.label}>API Base (Simulator)</Text>
+        <Text style={styles.label}>YouTube URL / ID / Query</Text>
         <TextInput
-          value={apiBase}
-          onChangeText={setApiBase}
-          placeholder="http://127.0.0.1:8000"
+          value={input}
+          onChangeText={setInput}
+          placeholder="Paste URL or ID, or type “artist - title”"
           autoCapitalize="none"
           autoCorrect={false}
-          keyboardType="url"
           style={styles.input}
         />
 
-        <Text style={styles.label}>YouTube URL</Text>
-        <TextInput
-          value={ytUrl}
-          onChangeText={setYtUrl}
-          placeholder="https://www.youtube.com/watch?v=..."
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          style={styles.input}
-        />
-
-        <TouchableOpacity style={[styles.btn, busy && styles.btnDisabled]} onPress={createAndPlay} disabled={busy}>
-          <Text style={styles.btnText}>{busy ? 'Working…' : 'Create + Play'}</Text>
+        <TouchableOpacity style={[styles.btn, busy && styles.btnDisabled]} disabled={busy} onPress={onSearch}>
+          <Text style={styles.btnText}>{busy ? 'Working…' : 'Search + Download'}</Text>
         </TouchableOpacity>
 
         {busy && (
@@ -93,49 +141,172 @@ export default function App() {
           </View>
         )}
 
+        {!!lyrics && (
+          <View style={styles.lyricsBox}>
+            <View style={styles.lyricsHeader}>
+              <Text style={styles.lyricsTitle}>Lyrics</Text>
+              <TouchableOpacity onPress={() => setShowLyrics(true)}><Text style={styles.lyricsMore}>Full screen</Text></TouchableOpacity>
+            </View>
+            <ScrollView style={{maxHeight: 220}}>
+              <Text selectable style={styles.lyricsText}>{lyrics}</Text>
+            </ScrollView>
+          </View>
+        )}
+
         {playerUrl && (
-          <View style={{ flex: 1, marginTop: 12, borderRadius: 10, overflow: 'hidden' }}>
+          <View style={{flex: 1, marginTop: 12, borderRadius: 10, overflow: 'hidden'}}>
             <WebView
-              source={{ html: htmlFor(playerUrl) }}
+              source={{html: htmlFor(playerUrl)}}
               originWhitelist={['*']}
               allowsInlineMediaPlayback
               mediaPlaybackRequiresUserAction={false}
             />
-            <TouchableOpacity
-              onPress={() => Linking.openURL(playerUrl)}
-              style={[styles.btn, { marginTop: 8, backgroundColor: '#3a3a3c' }]}
-            >
-              <Text style={styles.btnText}>Open in Safari</Text>
-            </TouchableOpacity>
           </View>
         )}
+
+        <Modal visible={showLyrics} animationType="slide" onRequestClose={() => setShowLyrics(false)}>
+          <EdgeSafe>
+            <View style={{paddingHorizontal: 16, paddingTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+              <Text style={{color: '#fff', fontSize: 18, fontWeight: '700'}}>Lyrics</Text>
+              <TouchableOpacity onPress={() => setShowLyrics(false)}><Text style={{color: '#7fb0ff', fontSize: 16}}>Close</Text></TouchableOpacity>
+            </View>
+            <ScrollView style={{flex: 1, padding: 16}}>
+              <Text selectable style={styles.lyricsText}>{lyrics}</Text>
+            </ScrollView>
+          </EdgeSafe>
+        </Modal>
+
+        <StepBar labels={['Download', 'Process', 'Sync', 'Calibrate', 'Generate', 'Upload']} enabledIdx={0} />
       </View>
-    </SafeAreaView>
+    </EdgeSafe>
+  );
+}
+
+// ---- Placeholder screens (disabled/coming soon) ----
+function Placeholder({title, subtitle}: {title: string; subtitle: string}) {
+  return (
+    <EdgeSafe>
+      <View style={styles.container}>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.subtitle}>{subtitle}</Text>
+        <View style={[styles.lyricsBox, {alignItems: 'center'}]}>
+          <Text style={[styles.lyricsText, {opacity: 0.6}]}>Coming soon</Text>
+        </View>
+      </View>
+    </EdgeSafe>
+  );
+}
+
+// ---- Tabs per Drawer screen ----
+const Tabs = createBottomTabNavigator();
+
+function Tabs_A() {
+  return (
+    <Tabs.Navigator screenOptions={{headerShown: false, tabBarStyle: styles.tabBar}}>
+      <Tabs.Screen name="Download" component={DownloadScreen} />
+      <Tabs.Screen name="Process" children={() => <Placeholder title="Mixterious" subtitle="Steps 1–4 of 6 — Process" />} options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}} />
+    </Tabs.Navigator>
+  );
+}
+
+function Tabs_B() {
+  return (
+    <Tabs.Navigator screenOptions={{headerShown: false, tabBarStyle: styles.tabBar}}>
+      <Tabs.Screen name="Sync" children={() => <Placeholder title="Mixterious" subtitle="Steps 3–4 of 6 — Sync" />} options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}} />
+      <Tabs.Screen name="Calibrate" children={() => <Placeholder title="Mixterious" subtitle="Steps 3–4 of 6 — Calibrate" />} options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}} />
+    </Tabs.Navigator>
+  );
+}
+
+function Tabs_C() {
+  return (
+    <Tabs.Navigator screenOptions={{headerShown: false, tabBarStyle: styles.tabBar}}>
+      <Tabs.Screen name="Generate" children={() => <Placeholder title="Mixterious" subtitle="Steps 5–6 of 6 — Generate" />} options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}} />
+      <Tabs.Screen name="Upload" children={() => <Placeholder title="Mixterious" subtitle="Steps 5–6 of 6 — Upload" />} options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}} />
+    </Tabs.Navigator>
+  );
+}
+
+// ---- Drawer ----
+const Drawer = createDrawerNavigator();
+
+function DrawerContent(props: any) {
+  return (
+    <DrawerContentScrollView {...props} contentContainerStyle={{flex: 1, paddingTop: 24}}>
+      <Text style={styles.drawerHeader}>Mixterious{'\n\n'}Steps 1–4 of 6</Text>
+      <DrawerItem
+        label="Download Lyrics + Audio"
+        labelStyle={styles.drawerItem}
+        onPress={() => props.navigation.navigate('Steps 1–4')}
+      />
+      <Text style={[styles.drawerHeader, {marginTop: 24}]}>Mixterious{'\n\n'}Steps 3–4 of 6</Text>
+      <DrawerItem
+        label="Stitch Lyrics + Audio"
+        labelStyle={styles.drawerItem}
+        onPress={() => props.navigation.navigate('Steps 3–4')}
+      />
+      <Text style={[styles.drawerHeader, {marginTop: 24}]}>Mixterious{'\n\n'}Steps 5–6 of 6</Text>
+      <DrawerItem
+        label="Output Lyrics Video"
+        labelStyle={styles.drawerItem}
+        onPress={() => props.navigation.navigate('Steps 5–6')}
+      />
+    </DrawerContentScrollView>
+  );
+}
+
+function Root() {
+  const theme = {
+    ...DefaultTheme,
+    colors: {...DefaultTheme.colors, background: '#0b0b0b'},
+  };
+  return (
+    <NavigationContainer theme={theme}>
+      <Drawer.Navigator
+        initialRouteName="Steps 1–4"
+        drawerContent={(p) => <DrawerContent {...p} />}
+        screenOptions={{headerShown: false}}
+      >
+        <Drawer.Screen name="Steps 1–4" component={Tabs_A} />
+        <Drawer.Screen name="Steps 3–4" component={Tabs_B} />
+        <Drawer.Screen name="Steps 5–6" component={Tabs_C} />
+      </Drawer.Navigator>
+    </NavigationContainer>
+  );
+}
+
+export default function App(): JSX.Element {
+  return (
+    <SafeAreaProvider>
+      <Root />
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0b0b0b' },
-  container: { flex: 1, padding: 16 },
-  title: { color: '#fff', fontSize: 22, fontWeight: '700', marginBottom: 8 },
-  label: { color: '#bdbdbd', marginTop: 10 },
-  input: {
-    backgroundColor: '#1c1c1e',
-    color: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  btn: {
-    marginTop: 12,
-    backgroundColor: '#2f6dfc',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  btnDisabled: { opacity: 0.6 },
-  btnText: { color: '#fff', fontWeight: '700' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
-  progress: { color: '#ddd' },
+  safe: {flex: 1, backgroundColor: '#0b0b0b'},
+  container: {flex: 1, padding: 16},
+  title: {color: '#fff', fontSize: 24, fontWeight: '800'},
+  subtitle: {color: '#a9a9a9', marginBottom: 12},
+  label: {color: '#bdbdbd', marginTop: 10},
+  input: {backgroundColor: '#1c1c1e', color: '#fff', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10},
+  btn: {marginTop: 12, backgroundColor: '#2f6dfc', paddingVertical: 12, borderRadius: 10, alignItems: 'center'},
+  btnDisabled: {opacity: 0.6},
+  btnText: {color: '#fff', fontWeight: '700'},
+  row: {flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10},
+  progress: {color: '#ddd'},
+  lyricsBox: {marginTop: 12, backgroundColor: '#121214', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#2a2a2e'},
+  lyricsHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6},
+  lyricsTitle: {color: '#fff', fontWeight: '700'},
+  lyricsMore: {color: '#7fb0ff'},
+  lyricsText: {color: '#e6e6e6', fontFamily: 'Menlo'},
+  stepBar: {flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#2a2a2e', marginTop: 10},
+  stepItem: {flex: 1, alignItems: 'center', paddingVertical: 6},
+  stepDisabled: {opacity: 0.4},
+  stepDivider: {borderLeftWidth: 1, borderLeftColor: '#2a2a2e'},
+  stepText: {color: '#fff', fontSize: 12, fontWeight: '700'},
+  tabBar: {backgroundColor: '#121214', borderTopColor: '#2a2a2e'},
+  drawerHeader: {color: '#fff', fontSize: 16, fontWeight: '800', marginHorizontal: 16, marginBottom: 6},
+  drawerItem: {color: '#fff'},
 });
-// end of App.js
+// end of App.tsx
