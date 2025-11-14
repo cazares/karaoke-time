@@ -93,4 +93,6 @@ Thumbs.db
 .env
 .env.*.local
 
+vendor/
+
 # end of .gitignore
