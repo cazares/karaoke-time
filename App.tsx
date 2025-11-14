@@ -1,7 +1,7 @@
-// App.tsx — Mixterious (Drawer + Tabs) with centered header title/subtitle + hamburger
+// App.tsx — Mixterious (Drawer + Tabs) with compact WebView player and centered header
 // TypeScript, no SafeAreaView; uses react-native-safe-area-context for insets.
 
-import React, {JSX, useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -17,26 +17,22 @@ import {
   NavigationContainer,
   DefaultTheme,
   DrawerActions,
-  ParamListBase,
 } from '@react-navigation/native';
 import {
   createDrawerNavigator,
   DrawerContentScrollView,
   DrawerItem,
 } from '@react-navigation/drawer';
-import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
-import {
-  useSafeAreaInsets,
-  SafeAreaProvider,
-} from 'react-native-safe-area-context';
-import {WebView} from 'react-native-webview';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets, SafeAreaProvider } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 
 // ---- Config ----
 const PUBLIC_BASE = 'https://api.mixterioso.example.com'; // TODO: replace with your public hostname
 const LOCAL_BASE = 'http://127.0.0.1:8000';
 
 // ---- Edge-safe wrapper (no deprecated SafeAreaView) ----
-function EdgeSafe({children}: {children: React.ReactNode}): JSX.Element {
+function EdgeSafe({ children }: { children: React.ReactNode }) {
   const i = useSafeAreaInsets();
   return (
     <View
@@ -83,7 +79,7 @@ function StepBar({
 }
 
 // ---- Download Screen (Step 1 of 6) ----
-function DownloadScreen(): JSX.Element {
+function DownloadScreen() {
   const [apiBase, setApiBase] = useState<string>(PUBLIC_BASE);
   const [input, setInput] = useState<string>('');
   const [busy, setBusy] = useState<boolean>(false);
@@ -115,13 +111,12 @@ function DownloadScreen(): JSX.Element {
     };
   }, []);
 
+  // Ultra-compact HTML for the audio element (no header/padding)
   const htmlFor = (src: string): string => `
-    <!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">
-    <body style="margin:0;background:#0b0b0b;color:#fff;font:16px;height:100px -apple-system,system-ui">
-      <div style="padding:16px">
-        <h3 style="margin:0 0 12px">${(nowPlayingTitle || 'Mixterious — Player').replace(/</g,'&lt;')}</h3>
-        <audio controls autoplay src="${src}" style="width:100%"></audio>
-      </div>
+    <!doctype html>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <body style="margin:0;background:#0b0b0b;color:#fff;font:16px -apple-system,system-ui;">
+      <audio controls autoplay src="${src}" style="width:100%;display:block;"></audio>
     </body>
   `;
 
@@ -143,8 +138,8 @@ function DownloadScreen(): JSX.Element {
       // unified endpoint: /search { input }
       const res = await fetch(`${base}/search`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({input: value, bitrate_kbps: 192}),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: value, bitrate_kbps: 192 }),
       });
       if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
       const data: any = await res.json();
@@ -199,7 +194,7 @@ function DownloadScreen(): JSX.Element {
                 <Text style={styles.lyricsMore}>Full screen</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView style={{maxHeight: 220}}>
+            <ScrollView style={{ maxHeight: 220 }}>
               <Text selectable style={styles.lyricsText}>
                 {lyrics}
               </Text>
@@ -209,9 +204,10 @@ function DownloadScreen(): JSX.Element {
 
         {playerUrl && (
           <View
-            style={{flex: 1, marginTop: 12, borderRadius: 10, overflow: 'hidden'}}>
+            // Compact player: fixed height to leave room for lyrics/UI
+            style={{ height: 84, marginTop: 12, borderRadius: 10, overflow: 'hidden' }}>
             <WebView
-              source={{html: htmlFor(playerUrl)}}
+              source={{ html: htmlFor(playerUrl) }}
               originWhitelist={['*']}
               allowsInlineMediaPlayback
               mediaPlaybackRequiresUserAction={false}
@@ -232,14 +228,14 @@ function DownloadScreen(): JSX.Element {
                 justifyContent: 'space-between',
                 alignItems: 'center',
               }}>
-              <Text style={{color: '#fff', fontSize: 18, fontWeight: '700'}}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>
                 Lyrics
               </Text>
               <TouchableOpacity onPress={() => setShowLyrics(false)}>
-                <Text style={{color: '#7fb0ff', fontSize: 16}}>Close</Text>
+                <Text style={{ color: '#7fb0ff', fontSize: 16 }}>Close</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView style={{flex: 1, padding: 16}}>
+            <ScrollView style={{ flex: 1, padding: 16 }}>
               <Text selectable style={styles.lyricsText}>
                 {lyrics}
               </Text>
@@ -257,14 +253,14 @@ function DownloadScreen(): JSX.Element {
 }
 
 // ---- Placeholder screens (scaffold) ----
-function Placeholder({title, subtitle}: {title: string; subtitle: string}) {
+function Placeholder({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <EdgeSafe>
       <View style={styles.container}>
         <Text style={styles.pageTitle}>{title}</Text>
         <Text style={styles.pageSubtitle}>{subtitle}</Text>
-        <View style={[styles.lyricsBox, {alignItems: 'center'}]}>
-          <Text style={[styles.lyricsText, {opacity: 0.6}]}>Coming soon</Text>
+        <View style={[styles.lyricsBox, { alignItems: 'center' }]}>
+          <Text style={[styles.lyricsText, { opacity: 0.6 }]}>Coming soon</Text>
         </View>
       </View>
     </EdgeSafe>
@@ -276,14 +272,14 @@ const Tabs = createBottomTabNavigator();
 
 function Tabs_A() {
   return (
-    <Tabs.Navigator screenOptions={{headerShown: false, tabBarStyle: styles.tabBar}}>
+    <Tabs.Navigator screenOptions={{ headerShown: false, tabBarStyle: styles.tabBar }}>
       <Tabs.Screen name="Download" component={DownloadScreen} />
       <Tabs.Screen
         name="Process"
         children={() => (
           <Placeholder title="Mixterious" subtitle="Steps 1–4 of 6 — Process" />
         )}
-        options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}}
+        options={{ tabBarStyle: [styles.tabBar, { opacity: 0.4 }] }}
       />
     </Tabs.Navigator>
   );
@@ -291,20 +287,20 @@ function Tabs_A() {
 
 function Tabs_B() {
   return (
-    <Tabs.Navigator screenOptions={{headerShown: false, tabBarStyle: styles.tabBar}}>
+    <Tabs.Navigator screenOptions={{ headerShown: false, tabBarStyle: styles.tabBar }}>
       <Tabs.Screen
         name="Sync"
         children={() => (
           <Placeholder title="Mixterious" subtitle="Steps 3–4 of 6 — Sync" />
         )}
-        options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}}
+        options={{ tabBarStyle: [styles.tabBar, { opacity: 0.4 }] }}
       />
       <Tabs.Screen
         name="Calibrate"
         children={() => (
           <Placeholder title="Mixterious" subtitle="Steps 3–4 of 6 — Calibrate" />
         )}
-        options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}}
+        options={{ tabBarStyle: [styles.tabBar, { opacity: 0.4 }] }}
       />
     </Tabs.Navigator>
   );
@@ -312,51 +308,49 @@ function Tabs_B() {
 
 function Tabs_C() {
   return (
-    <Tabs.Navigator screenOptions={{headerShown: false, tabBarStyle: styles.tabBar}}>
+    <Tabs.Navigator screenOptions={{ headerShown: false, tabBarStyle: styles.tabBar }}>
       <Tabs.Screen
         name="Generate"
         children={() => (
           <Placeholder title="Mixterious" subtitle="Steps 5–6 of 6 — Generate" />
         )}
-        options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}}
+        options={{ tabBarStyle: [styles.tabBar, { opacity: 0.4 }] }}
       />
       <Tabs.Screen
         name="Upload"
         children={() => (
           <Placeholder title="Mixterious" subtitle="Steps 5–6 of 6 — Upload" />
         )}
-        options={{tabBarStyle: [styles.tabBar, {opacity: 0.4}]}}
+        options={{ tabBarStyle: [styles.tabBar, { opacity: 0.4 }] }}
       />
     </Tabs.Navigator>
   );
 }
 
 // ---- Drawer header helpers ----
-function HeaderTitle({title, subtitle}: {title: string; subtitle: string}) {
+function HeaderTitle({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <View style={{alignItems: 'center'}}>
-      <Text style={{color: '#fff', fontSize: 18, fontWeight: '800'}}>{title}</Text>
-      <Text style={{color: '#a9a9a9', fontSize: 12}}>{subtitle}</Text>
+    <View style={{ alignItems: 'center' }}>
+      <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>{title}</Text>
+      <Text style={{ color: '#a9a9a9', fontSize: 12 }}>{subtitle}</Text>
     </View>
   );
 }
 
-function HeaderMenuButton({onPress}: {onPress: () => void}) {
+function HeaderMenuButton({ onPress }: { onPress: () => void }) {
   return (
     <TouchableOpacity
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Open menu"
-      hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       style={{
-        width: 64,           // wider tap target (was ~32)
-        height: 64,          // taller tap target
+        width: 64,
+        height: 64,
         alignItems: 'center',
         justifyContent: 'center',
-        paddingHorizontal: 0,
-        paddingVertical: 0,
       }}>
-      <Text style={{color: '#fff', fontSize: 40, lineHeight: 40}}>≡</Text> {/* doubled from 20 */}
+      <Text style={{ color: '#fff', fontSize: 40, lineHeight: 40 }}>≡</Text>
     </TouchableOpacity>
   );
 }
@@ -374,7 +368,7 @@ function DrawerContent(props: any) {
         paddingTop: insets.top,
         paddingBottom: insets.bottom,
         backgroundColor: '#1E282D',
-        justifyContent: 'center', // <-- vertical centering
+        justifyContent: 'center', // vertical centering
       }}>
       <Text style={styles.drawerHeader}>Steps 1-2</Text>
       <DrawerItem
@@ -382,7 +376,7 @@ function DrawerContent(props: any) {
         labelStyle={styles.drawerItem}
         onPress={() => props.navigation.navigate('Steps 1–4')}
       />
-      <Text style={[styles.drawerHeader, {marginTop: 24}]}>
+      <Text style={[styles.drawerHeader, { marginTop: 24 }]}>
         Steps 3-4
       </Text>
       <DrawerItem
@@ -390,7 +384,7 @@ function DrawerContent(props: any) {
         labelStyle={styles.drawerItem}
         onPress={() => props.navigation.navigate('Steps 3–4')}
       />
-      <Text style={[styles.drawerHeader, {marginTop: 24}]}>
+      <Text style={[styles.drawerHeader, { marginTop: 24 }]}>
         Steps 5–6
       </Text>
       <DrawerItem
@@ -405,7 +399,7 @@ function DrawerContent(props: any) {
 function Root() {
   const theme = {
     ...DefaultTheme,
-    colors: {...DefaultTheme.colors, background: '#0b0b0b'},
+    colors: { ...DefaultTheme.colors, background: '#0b0b0b' },
   };
 
   // Per-screen subtitle mapping for the centered header
@@ -426,11 +420,11 @@ function Root() {
     <NavigationContainer theme={theme}>
       <Drawer.Navigator
         initialRouteName="Steps 1–4"
-        drawerContent={p => <DrawerContent {...p} />}
+        drawerContent={(p) => <DrawerContent {...p} />}
         // Header with centered title/subtitle + hamburger
-        screenOptions={({navigation, route}) => ({
+        screenOptions={({ navigation, route }) => ({
           headerShown: true,
-          headerStyle: {backgroundColor: '#0b0b0b', alignContent: 'center', alignItems: 'center', alignSelf: 'center'},
+          headerStyle: { backgroundColor: '#0b0b0b' },
           headerTintColor: '#fff',
           headerTitleAlign: 'center',
           headerTitle: () => (
@@ -452,7 +446,7 @@ function Root() {
   );
 }
 
-export default function App(): JSX.Element {
+export default function App() {
   return (
     <SafeAreaProvider>
       <Root />
@@ -461,11 +455,11 @@ export default function App(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  safe: {flex: 1, backgroundColor: '#0b0b0b'},
-  container: {flex: 1, padding: 16},
-  pageTitle: {color: '#fff', fontSize: 24, fontWeight: '800'},
-  pageSubtitle: {color: '#a9a9a9', marginBottom: 12},
-  label: {color: '#bdbdbd', marginTop: 10},
+  safe: { flex: 1, backgroundColor: '#0b0b0b' },
+  container: { flex: 1, padding: 16 },
+  pageTitle: { color: '#fff', fontSize: 24, fontWeight: '800' },
+  pageSubtitle: { color: '#a9a9a9', marginBottom: 12 },
+  label: { color: '#bdbdbd', marginTop: 10 },
   input: {
     backgroundColor: '#1c1c1e',
     color: '#fff',
@@ -480,10 +474,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
-  btnDisabled: {opacity: 0.6},
-  btnText: {color: '#fff', fontWeight: '700'},
-  row: {flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10},
-  progress: {color: '#ddd'},
+  btnDisabled: { opacity: 0.6 },
+  btnText: { color: '#fff', fontWeight: '700' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
+  progress: { color: '#ddd' },
   lyricsBox: {
     marginTop: 12,
     backgroundColor: '#121214',
@@ -498,22 +492,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
-  lyricsTitle: {color: '#fff', fontWeight: '700'},
-  lyricsMore: {color: '#7fb0ff'},
-  lyricsText: {color: '#e6e6e6', fontFamily: 'Menlo'},
+  lyricsTitle: { color: '#fff', fontWeight: '700' },
+  lyricsMore: { color: '#7fb0ff' },
+  lyricsText: { color: '#e6e6e6', fontFamily: 'Menlo' },
   stepBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#EEE',
+    borderTopColor: '#2a2a2e',
     marginTop: 10,
   },
-  stepItem: {flex: 1, alignItems: 'center', paddingVertical: 6},
-  stepDisabled: {opacity: 0.4},
-  stepDivider: {borderLeftWidth: 1, borderRightWidth: 1, borderLeftColor: '#EEE'},
-  stepText: {color: '#fff', fontSize: 12, fontWeight: '700'},
-  tabBar: {backgroundColor: '#EEE', borderTopColor: '#EEE'},
+  stepItem: { flex: 1, alignItems: 'center', paddingVertical: 6 },
+  stepDisabled: { opacity: 0.4 },
+  stepDivider: { borderLeftWidth: 1, borderLeftColor: '#2a2a2e' },
+  stepText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  tabBar: { backgroundColor: '#121214', borderTopColor: '#2a2a2e' },
   drawerHeader: {
     color: 'white',
     fontSize: 22,
@@ -521,7 +515,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 15,
     marginBottom: 6,
     paddingTop: 35,
-    // flex: 1,
     justifyContent: 'space-between',
     alignContent: 'center',
     alignItems: 'center',
@@ -529,21 +522,10 @@ const styles = StyleSheet.create({
     borderTopColor: 'white',
   },
   drawerItem: {
-    color: 'white', 
-    backgroundColor: '#1E282D', 
-    // height: 60, 
-    // textAlignVertical: 'center', 
-    // textAlign: 'center', 
-    // justifyContent: 'center',
-    // alignContent: 'center',
-    // alignItems: 'center',
-    // verticalAlign: 'middle',
-    // alignSelf: 'center',
-    // paddingTop: 18,
+    color: 'white',
+    backgroundColor: '#1E282D',
     fontSize: 18,
-    fontWeight: 600,
-    // borderTopWidth: StyleSheet.hairlineWidth,
-    // borderTopColor: 'white',
+    fontWeight: '600',
   },
 });
 // end of App.tsx
